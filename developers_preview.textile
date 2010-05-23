@@ -1,7 +1,7 @@
 ---
 layout: default
 title: Developer's Preview
-branch: DeftAvocado2
+branch: ExtremeAvocado
 ---
 
 h2. Latest Release: {{page.branch}}
@@ -12,7 +12,8 @@ If you've been itching to install a new version "here's an early preview":http:/
 
 h2. What to expect
 
-* Only a few bugs (please report them)
+* Automatic refresh as content is added
+* "Quick Playlist" support
 * Support for Live MP3 Streams
 * Consistent default theming (thanks umbighouse)
 * Selectable theme support
