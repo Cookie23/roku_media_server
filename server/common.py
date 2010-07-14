@@ -149,6 +149,8 @@ def ext2mime(ext):
     return "audio/mpeg"
   elif ext in ("m4v", "mp4", "mov"):
     return "video/mp4"
+  elif ext in ("mpeg", "mpg", "mpeg2", "iso"):
+    return "video/mp4"
   elif ext == "wma":
     return "audio/x-ms-wma"
   elif ext == "jpg" or ext == "peg":
@@ -202,12 +204,14 @@ def client_dir(config):
   return os.path.join(os.path.pardir, "client")
 
 def is_video(path):
-  return ext2mime(path) in ("video/mp4",)
+  return ext2mime(path) in ("video/mp4","video/mpeg")
 
 def key_to_path(config, key, base=None):
   if key == "music":
     base_dir = music_dir(config)
   elif key == "video":
+    base_dir = video_dir(config)
+  elif key == "tc":
     base_dir = video_dir(config)
   elif key == "client":
     base_dir = client_dir(config)

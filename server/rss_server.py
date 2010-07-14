@@ -129,6 +129,15 @@ def file2item(key, fname, base_dir, config, image=None):
     description = "Video"
     filetype = "mp4"
 
+  elif ext in (".mpeg", ".mpg", ".mpeg2", ".iso"):
+    # this is a video file to transcode
+
+    basename = os.path.split(fname)[1]
+    title = os.path.splitext(basename)[0]
+    description = "Transcoded Video"
+    filetype = "mp4"
+    key = "tc"
+
   else:
     # don't know what this is
 
@@ -341,7 +350,7 @@ def getdoc(key, path, base_dir, dirrange, config, recurse=False):
     minl = minl.lower()
     maxl = maxl.lower()
 
-  media_re = re.compile("\.mp3|\.wma|\.m4v|\.mp4|\.mov")
+  media_re = re.compile("\.mp3|\.wma|\.m4v|\.mp4|\.mov|\.mpeg|\.mpg|\.mpeg2|\.iso")
 
   for base, dirs, files in os.walk(path):
     if not recurse:
@@ -424,8 +433,87 @@ def doc2m3u(doc):
   return "\n".join(lines)
 
 def range_handler(fname):
-  "return all or part of the bytes of a fyle depending on whether we were called with the HTTP_RANGE header set"
+  "return all or part of the bytes of a file depending on whether we were called with the HTTP_RANGE header set"
+  logging.debug("open file: "+fname)
   f = open(fname, "rb")
+
+  bytes = None
+  CHUNK_SIZE = 10 * 1024;
+
+  # is this a range request?
+  # looks like: 'HTTP_RANGE': 'bytes=41017-'
+  if 'HTTP_RANGE' in web.ctx.environ:
+    logging.debug("server issued range query: %s" % web.ctx.environ['HTTP_RANGE'])
+
+    # try a start only regex
+    regex = re.compile('bytes=(\d+)-$')
+    grp = regex.match(web.ctx.environ['HTTP_RANGE'])
+    if grp:
+      start = int(grp.group(1))
+      logging.debug("player issued range request starting at %d" % start)
+
+      f.seek(start)
+
+      # we'll stream it
+      bytes = f.read(CHUNK_SIZE)
+      while not bytes == "":
+        yield bytes
+        bytes = f.read(CHUNK_SIZE)
+
+      f.close()
+
+    # try a span regex
+    regex = re.compile('bytes=(\d+)-(\d+)$')
+    grp = regex.match(web.ctx.environ['HTTP_RANGE'])
+    if grp:
+      start,end = int(grp.group(1)), int(grp.group(2))
+      logging("player issued range request starting at %d and ending at %d" % (start, end))
+
+      f.seek(start)
+      bytes_remaining = end-start+1 # +1 because range is inclusive
+      chunk_size = min(bytes_remaining, chunk_size)
+      bytes = f.read(chunk_size)
+
+      while not bytes == "":
+        yield bytes
+
+        bytes_remaining -= chunk_size
+        chunk_size = min(bytes_remaining, chunk_size)
+        bytes = f.read(chunk_size)
+
+      f.close()
+    
+    # try a tail regex
+    regex = re.compile('bytes=-(\d+)$')
+    grp = regex.match(web.ctx.environ['HTTP_RANGE'])
+    if grp:
+      end = int(grp.group(1))
+      logging.debug("player issued tail request beginning at %d from end" % end)
+
+      f.seek(-end, os.SEEK_END)
+      bytes = f.read()
+      yield bytes
+      f.close()
+
+  else:
+    # write the whole thing
+    # we'll stream it
+    bytes = f.read(CHUNK_SIZE)
+    while not bytes == "":
+      yield bytes
+      bytes = f.read(CHUNK_SIZE)
+    
+    f.close()
+
+def range_handler_tc(fname):
+  "transcode and return all or part of the bytes of a file depending on whether we were called with the HTTP_RANGE header set"
+  logging.debug("trancode file: "+fname)
+  #f = open(fname, "rb")
+  #tc = popen('/usr/local/bin/roku_trans.sh "'+fname+'"',8096,None,None,PIPE)
+  #tc = popen('ffmpeg -i '+fname+' -vcodec copy -acodec copy  -f dvd ',8096,None,None,PIPE)
+  #tc = popen('mencoder '+fname+' -of mp4 -ovc lavc -lavcopts vcodec=mp4 -oac lavc -lavcopts acodec=mp2 -really-quiet ',8096,None,None,PIPE)
+  tc = popen('/usr/bin/ffmpeg -i ' + fname + ' -f mp4 -vcodec mpeg4 -maxrate 2000 -b 1500 -qmin 3 -qmax 5 -bufsize 4096 -g 300 -acodec aac -ar 44100 -ab 128 -s 320*240 ',809600,None,None,PIPE)
+  f = tc.stdout
 
   bytes = None
   CHUNK_SIZE = 10 * 1024;
@@ -502,7 +590,6 @@ class MediaHandler:
     song = web.input(name = None, key = None)
     if not song.name:
       return
-
     config = parse_config(config_file)
     name = song.name
 
@@ -528,7 +615,10 @@ class MediaHandler:
 
     web.header("Content-Type", mimetype)
     web.header("Content-Length", "%d" % size)
-    return range_handler(name)
+    if song.key == "tc": 
+    	return range_handler_tc(name)
+    else:
+	return range_handler(name)
 
 class RssHandler:
   def GET(self):
