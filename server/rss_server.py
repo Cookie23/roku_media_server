@@ -512,8 +512,12 @@ def range_handler_tc(fname):
   #tc = popen('/usr/local/bin/roku_trans.sh "'+fname+'"',8096,None,None,PIPE)
   #tc = popen('ffmpeg -i '+fname+' -vcodec copy -acodec copy  -f dvd ',8096,None,None,PIPE)
   #tc = popen('mencoder '+fname+' -of mp4 -ovc lavc -lavcopts vcodec=mp4 -oac lavc -lavcopts acodec=mp2 -really-quiet ',8096,None,None,PIPE)
-  tc = popen('/usr/bin/ffmpeg -i ' + fname + ' -f mp4 -vcodec mpeg4 -maxrate 2000 -b 1500 -qmin 3 -qmax 5 -bufsize 4096 -g 300 -acodec aac -ar 44100 -ab 128 -s 320*240 ',809600,None,None,PIPE)
-  f = tc.stdout
+
+  logging.debug('transcode using: /usr/bin/ffmpeg -i "' + fname + '"  -f mp4 -vcodec mpeg4 -acodec aac -y /tmp/trans.mp4')
+  tc = os.popen('ffmpeg -i "' + fname + '"  -f mp4 -vcodec mpeg4 -acodec aac -y /tmp/trans.mp4',1024*5)
+  #tc = os.spawnp(os.NOWAIT,'ffmpeg','ffmpeg -i "' + fname + '"  -f mp4 -vcodec mpeg4 -acodec aac -y /tmp/trans.mp4')
+
+  f =  open('/tmp/trans.mp4', "rb")
 
   bytes = None
   CHUNK_SIZE = 10 * 1024;
@@ -582,6 +586,7 @@ def range_handler_tc(fname):
       bytes = f.read(CHUNK_SIZE)
     
     f.close()
+
 
 class MediaHandler:
   "retrieve a song"
