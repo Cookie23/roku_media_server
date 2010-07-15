@@ -440,7 +440,9 @@ def range_handler(fname):
   "return all or part of the bytes of a file depending on whether we were called with the HTTP_RANGE header set"
   logging.debug("open file: "+fname)
   f = open(fname, "rb")
+  range_handler_for_file(f)
 
+def range_handler_for_file(f):
   bytes = None
   CHUNK_SIZE = 10 * 1024;
 
@@ -513,102 +515,35 @@ def range_handler_tc(fname):
   "transcode and return all or part of the bytes of a file depending on whether we were called with the HTTP_RANGE header set"
   global tc_proc, tc_fname
   config = parse_config(config_file)
+  tc_file=tc_file(config)
 
   logging.debug("trancode file: " + fname)
 
   if fname != tc_fname or tc_proc == None:
-	#if tc_proc != None:
-	#	logging.debug('End Transcode: '+ tc_fname)
-	#	kill(tc_proc.pid)
+	if tc_proc != None and tc_proc.poll() == None:
+		logging.debug('End Transcode: '+ tc_fname)
+		tc_proc.terminate()
+		Pclose(tc_proc)
 	tc_fname = fname
 	logging.debug('Start new transcode of: ' + tc_fname)
 
   	tc_cmd = tc_path(config) + ' "' + tc_fname + '" ' + tc_args(config)
 	logging.debug('Run: ' + tc_cmd)
 
-	#transcoding via PIPE /dev/stdout
-	#tc_proc = os.popen(tc_cmd,-1,stdout=PIPE)
-
-  	#transcoding via fixed file /tmp/trans.mp4
-  	tc_proc = os.popen(tc_cmd)
-	time.sleep(30)
+ 	if tc_file == "PIPE":
+		#transcoding via STDOUT
+		tc_proc = subprocess.Popen(tc_cmd,bufsize=-1,shell=True,stdout=subprocess.PIPE)
+	else:
+  		#transcoding via fixed file
+  		tc_proc = subprocess.Popen(tc_cmd,shell=True)
   else:
   	logging.debug("Send: " + tc_fname)
 
-  #open stdout for stream
-  #f = tc_proc.stdout
- 
-  #open /tmp/trans for stream
-  f =  open(tc_file(config), "rb")
-
-
-  bytes = None
-  CHUNK_SIZE = 10 * 1024;
-
-  # is this a range request?
-  # looks like: 'HTTP_RANGE': 'bytes=41017-'
-  if 'HTTP_RANGE' in web.ctx.environ:
-    logging.debug("server issued range query: %s" % web.ctx.environ['HTTP_RANGE'])
-
-    # try a start only regex
-    regex = re.compile('bytes=(\d+)-$')
-    grp = regex.match(web.ctx.environ['HTTP_RANGE'])
-    if grp:
-      start = int(grp.group(1))
-      logging.debug("player issued range request starting at %d" % start)
-
-      f.seek(start)
-
-      # we'll stream it
-      bytes = f.read(CHUNK_SIZE)
-      while not bytes == "":
-        yield bytes
-        bytes = f.read(CHUNK_SIZE)
-
-      f.close()
-
-    # try a span regex
-    regex = re.compile('bytes=(\d+)-(\d+)$')
-    grp = regex.match(web.ctx.environ['HTTP_RANGE'])
-    if grp:
-      start,end = int(grp.group(1)), int(grp.group(2))
-      logging("player issued range request starting at %d and ending at %d" % (start, end))
-
-      f.seek(start)
-      bytes_remaining = end-start+1 # +1 because range is inclusive
-      chunk_size = min(bytes_remaining, chunk_size)
-      bytes = f.read(chunk_size)
-
-      while not bytes == "":
-        yield bytes
-
-        bytes_remaining -= chunk_size
-        chunk_size = min(bytes_remaining, chunk_size)
-        bytes = f.read(chunk_size)
-
-      f.close()
-    
-    # try a tail regex
-    regex = re.compile('bytes=-(\d+)$')
-    grp = regex.match(web.ctx.environ['HTTP_RANGE'])
-    if grp:
-      end = int(grp.group(1))
-      logging.debug("player issued tail request beginning at %d from end" % end)
-
-      f.seek(-end, os.SEEK_END)
-      bytes = f.read()
-      yield bytes
-      f.close()
-
+  time.sleep(45)
+  if tc_file == "PIPE":
+	range_handler_for_file(tc_proc.stdout)
   else:
-    # write the whole thing
-    # we'll stream it
-    bytes = f.read(CHUNK_SIZE)
-    while not bytes == "":
-      yield bytes
-      bytes = f.read(CHUNK_SIZE)
-    
-    f.close()
+  	range_handler(tc_file)
   
 
 class MediaHandler:
@@ -647,6 +582,7 @@ class MediaHandler:
     	return range_handler_tc(name)
 
     web.header("Content-Length", "%d" % size)
+
     return range_handler(name)
 
 class RssHandler:
