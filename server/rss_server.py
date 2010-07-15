@@ -7,6 +7,8 @@
 # this file contains the configurable variables
 config_file = "config.ini"
 LOG_FILE = "my_media_log.txt"
+tc_proc = None
+tc_fname = None
 
 # main webapp
 import os
@@ -19,6 +21,7 @@ import ConfigParser
 import math
 import logging
 from common import *
+import subprocess 
 
 logging.basicConfig(filename=LOG_FILE, level=logging.DEBUG)
 #formatter = logging.Formatter("%(levelname)@s[%(asctime)s]: %(message)s")
@@ -507,17 +510,37 @@ def range_handler(fname):
 
 def range_handler_tc(fname):
   "transcode and return all or part of the bytes of a file depending on whether we were called with the HTTP_RANGE header set"
-  logging.debug("trancode file: "+fname)
-  #f = open(fname, "rb")
-  #tc = popen('/usr/local/bin/roku_trans.sh "'+fname+'"',8096,None,None,PIPE)
-  #tc = popen('ffmpeg -i '+fname+' -vcodec copy -acodec copy  -f dvd ',8096,None,None,PIPE)
-  #tc = popen('mencoder '+fname+' -of mp4 -ovc lavc -lavcopts vcodec=mp4 -oac lavc -lavcopts acodec=mp2 -really-quiet ',8096,None,None,PIPE)
+  logging.debug("trancode file: " + fname)
+  global tc_proc, tc_fname
 
-  logging.debug('transcode using: /usr/bin/ffmpeg -i "' + fname + '"  -f mp4 -vcodec mpeg4 -acodec aac -y /tmp/trans.mp4')
-  tc = os.popen('ffmpeg -i "' + fname + '"  -f mp4 -vcodec mpeg4 -acodec aac -y /tmp/trans.mp4',1024*5)
-  #tc = os.spawnp(os.NOWAIT,'ffmpeg','ffmpeg -i "' + fname + '"  -f mp4 -vcodec mpeg4 -acodec aac -y /tmp/trans.mp4')
+  if fname != tc_fname or tc_proc == None:
+	if tc_proc != None:
+		logging.debug('End Transcode: '+ tc_fname)
+		kill(tc_proc.pid)
+	tc_fname = fname
+	logging.debug('Start new transcode of: ' + tc_fname)
 
+  	config = parse_config(config_file)
+  	tc_cmd = tc_path(config) + ' "' + tc_fname + '" ' + tc_args(config)
+	logging.debug('Run: '+tc_cmd)
+
+	#transcoding via PIPE /dev/stdout
+	#tc_proc = os.popen(tc_cmd,-1,stdout=PIPE)
+
+  	#transcoding via fixed file /tmp/trans.mp4
+  	tc_proc = os.popen(tc_cmd,-1)
+  else:
+  	logging.debug("Send: " + tc_fname)
+
+  if tc_proc == None:
+	 logging.debug("Failed tc_proc")
+
+  #open stdout for stream
+  #f = tc_proc.stdout
+ 
+  #open /tmp/trans for stream
   f =  open('/tmp/trans.mp4', "rb")
+
 
   bytes = None
   CHUNK_SIZE = 10 * 1024;
@@ -619,11 +642,12 @@ class MediaHandler:
       return None
 
     web.header("Content-Type", mimetype)
-    web.header("Content-Length", "%d" % size)
-    if song.key == "tc": 
+
+    if song.key == "tc" and mimetype == "video/mp4": 
     	return range_handler_tc(name)
-    else:
-	return range_handler(name)
+
+    web.header("Content-Length", "%d" % size)
+    return range_handler(name)
 
 class RssHandler:
   def GET(self):

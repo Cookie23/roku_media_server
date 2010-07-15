@@ -199,6 +199,29 @@ def video_dir(config):
       return path
   return None
 
+def tc_path(config):
+  "this is an optional variable so we're more careful about retrieving it"
+  if config.has_option("config", "tc_path") and config.has_option("config", "tc_args"):
+    path = config.get("config", "tc_path")
+    return path
+  return None
+
+def tc_args(config):
+  "this is an optional variable so we're more careful about retrieving it"
+  if config.has_option("config", "tc_path") and config.has_option("config", "tc_args"):
+    args = config.get("config", "tc_args")
+    return args
+  return None
+
+def tc_types(config):
+  "this is an optional variable so we're more careful about retrieving it"
+  if config.has_option("config", "tc_types"):
+    types = config.get("config", "tc_types")
+    return types
+  return None
+
+
+
 def client_dir(config):
   "path to the client code"
   return os.path.join(os.path.pardir, "client")
