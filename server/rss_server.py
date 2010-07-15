@@ -512,6 +512,7 @@ def range_handler(fname):
 def range_handler_tc(fname):
   "transcode and return all or part of the bytes of a file depending on whether we were called with the HTTP_RANGE header set"
   global tc_proc, tc_fname
+  config = parse_config(config_file)
 
   logging.debug("trancode file: " + fname)
 
@@ -522,7 +523,6 @@ def range_handler_tc(fname):
 	tc_fname = fname
 	logging.debug('Start new transcode of: ' + tc_fname)
 
-  	config = parse_config(config_file)
   	tc_cmd = tc_path(config) + ' "' + tc_fname + '" ' + tc_args(config)
 	logging.debug('Run: ' + tc_cmd)
 
@@ -539,7 +539,7 @@ def range_handler_tc(fname):
   #f = tc_proc.stdout
  
   #open /tmp/trans for stream
-  f =  open('/tmp/trans.mp4', "rb")
+  f =  open(tc_file(config), "rb")
 
 
   bytes = None

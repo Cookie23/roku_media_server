@@ -213,11 +213,11 @@ def tc_args(config):
     return args
   return None
 
-def tc_types(config):
+def tc_file(config):
   "this is an optional variable so we're more careful about retrieving it"
-  if config.has_option("config", "tc_types"):
-    types = config.get("config", "tc_types")
-    return types
+  if config.has_option("config", "tc_file"):
+    file = config.get("config", "tc_file")
+    return file
   return None
 
 
