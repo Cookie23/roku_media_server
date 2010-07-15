@@ -138,7 +138,7 @@ def file2item(key, fname, base_dir, config, image=None):
     basename = os.path.split(fname)[1]
     title = os.path.splitext(basename)[0]
     description = "Transcoded Video"
-    filetype = "mp4"
+    filetype = "mpeg"
     key = "tc"
 
   else:
@@ -514,9 +514,9 @@ def range_handler_tc(fname):
   global tc_proc, tc_fname
 
   if fname != tc_fname or tc_proc == None:
-	if tc_proc != None:
-		logging.debug('End Transcode: '+ tc_fname)
-		kill(tc_proc.pid)
+	#if tc_proc != None:
+	#	logging.debug('End Transcode: '+ tc_fname)
+	#	kill(tc_proc.pid)
 	tc_fname = fname
 	logging.debug('Start new transcode of: ' + tc_fname)
 
