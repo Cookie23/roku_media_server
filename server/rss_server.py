@@ -22,6 +22,7 @@ import math
 import logging
 from common import *
 import subprocess 
+import time
 
 logging.basicConfig(filename=LOG_FILE, level=logging.DEBUG)
 #formatter = logging.Formatter("%(levelname)@s[%(asctime)s]: %(message)s")
@@ -138,7 +139,7 @@ def file2item(key, fname, base_dir, config, image=None):
     basename = os.path.split(fname)[1]
     title = os.path.splitext(basename)[0]
     description = "Transcoded Video"
-    filetype = "mpeg"
+    filetype = "mp4"
     key = "tc"
 
   else:
@@ -510,8 +511,9 @@ def range_handler(fname):
 
 def range_handler_tc(fname):
   "transcode and return all or part of the bytes of a file depending on whether we were called with the HTTP_RANGE header set"
-  logging.debug("trancode file: " + fname)
   global tc_proc, tc_fname
+
+  logging.debug("trancode file: " + fname)
 
   if fname != tc_fname or tc_proc == None:
 	#if tc_proc != None:
@@ -522,18 +524,16 @@ def range_handler_tc(fname):
 
   	config = parse_config(config_file)
   	tc_cmd = tc_path(config) + ' "' + tc_fname + '" ' + tc_args(config)
-	logging.debug('Run: '+tc_cmd)
+	logging.debug('Run: ' + tc_cmd)
 
 	#transcoding via PIPE /dev/stdout
 	#tc_proc = os.popen(tc_cmd,-1,stdout=PIPE)
 
   	#transcoding via fixed file /tmp/trans.mp4
-  	tc_proc = os.popen(tc_cmd,-1)
+  	tc_proc = os.popen(tc_cmd)
+	time.sleep(30)
   else:
   	logging.debug("Send: " + tc_fname)
-
-  if tc_proc == None:
-	 logging.debug("Failed tc_proc")
 
   #open stdout for stream
   #f = tc_proc.stdout
@@ -609,7 +609,7 @@ def range_handler_tc(fname):
       bytes = f.read(CHUNK_SIZE)
     
     f.close()
-
+  
 
 class MediaHandler:
   "retrieve a song"
