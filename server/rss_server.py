@@ -536,13 +536,13 @@ def range_handler_tc(fname):
         logging.debug('End Transcode: '+ tc_fname)
         tc_f.close()
         tc_proc.terminate()
-        subprocess.Pclose(tc_proc)
         if file_out != "PIPE":
             tc_proc.wait()
         else:
             time.sleep(15)
             if tc_proc.poll() == None:
                 tc_proc.kill()
+            tc_wait()
 
     tc_fname = fname
     logging.debug('Start new transcode of: ' + tc_fname)
@@ -575,7 +575,6 @@ def range_handler_tc(fname):
 
   bytes = None
   CHUNK_SIZE = 10 * 1024;
-  #CHUNK_SIZE = 5 * 1024;
 
 
   # is this a range request?
@@ -593,7 +592,10 @@ def range_handler_tc(fname):
         start = int(grp.group(1))
         logging.debug("player issued range request starting at %d" % start)
 
-        f.seek(start)
+        try:
+            f.seek(start)
+        except:
+            f.seek(0)
 
         # we'll stream it
 
@@ -708,7 +710,7 @@ class MediaHandler:
       return None
 
     if song.key == "tc" and mimetype == "video/mp4":
-        #size = 0
+        #size = 10
         web.header("Content-Type", mimetype)
         #web.header("Content-Length", "%d" % size)
         return range_handler_tc(name)
