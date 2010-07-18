@@ -52,11 +52,11 @@ def relpath26(path, start=os.curdir):
 # cross platform python2.5 terminator found on stackoverflow
 def terminate(process):
     """
-    Kills a process, useful on 2.5 where subprocess.Popens don't have a 
+    Kills a process, useful on 2.5 where subprocess.Popens don't have a
     terminate method.
 
 
-    Used here because we're stuck on 2.5 and don't have Popen.terminate 
+    Used here because we're stuck on 2.5 and don't have Popen.terminate
     goodness.
     """
 
@@ -72,7 +72,7 @@ def terminate(process):
     terminate_default = terminate_nix
 
     handlers = {
-        "win32": terminate_win, 
+        "win32": terminate_win,
         "linux2": terminate_nix
     }
 
@@ -149,7 +149,7 @@ def ext2mime(ext):
     return "audio/mpeg"
   elif ext in ("m4v", "mp4", "mov"):
     return "video/mp4"
-  elif ext in ("mpeg", "mpg", "mpeg2", "iso"):
+  elif ext in ("mpeg", "mpg", "mpeg2", "iso", "wmv", "asf", "flv"):
     return "video/mp4"
   elif ext == "wma":
     return "audio/x-ms-wma"
@@ -199,12 +199,35 @@ def video_dir(config):
       return path
   return None
 
+def tc_path(config):
+  "this is an optional variable so we're more careful about retrieving it"
+  if config.has_option("config", "tc_path") and config.has_option("config", "tc_args"):
+    path = config.get("config", "tc_path")
+    return path
+  return None
+
+def tc_args(config):
+  "this is an optional variable so we're more careful about retrieving it"
+  if config.has_option("config", "tc_path") and config.has_option("config", "tc_args"):
+    args = config.get("config", "tc_args")
+    return args
+  return None
+
+def tc_file(config):
+  "this is an optional variable so we're more careful about retrieving it"
+  if config.has_option("config", "tc_file"):
+    file = config.get("config", "tc_file")
+    return file
+  return None
+
+
+
 def client_dir(config):
   "path to the client code"
   return os.path.join(os.path.pardir, "client")
 
 def is_video(path):
-  return ext2mime(path) in ("video/mp4","video/mpeg")
+  return ext2mime(path) in ("video/mp4",)
 
 def key_to_path(config, key, base=None):
   if key == "music":

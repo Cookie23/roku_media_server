@@ -8,6 +8,10 @@
 config_file = "config.ini"
 LOG_FILE = "my_media_log.txt"
 
+#transcoding subproccess state
+tc_proc = None
+tc_fname = None
+
 # main webapp
 import os
 import re
@@ -19,6 +23,8 @@ import ConfigParser
 import math
 import logging
 from common import *
+import subprocess
+import time
 
 logging.basicConfig(filename=LOG_FILE, level=logging.DEBUG)
 #formatter = logging.Formatter("%(levelname)@s[%(asctime)s]: %(message)s")
@@ -106,7 +112,7 @@ def file2item(key, fname, base_dir, config, image=None):
 
     title = tag.getTitle()
     description = tag.getArtist()
-    
+
     tracknum = tag.getTrackNum()[0]
     if tracknum:
       tracknum = str(tracknum)
@@ -129,7 +135,7 @@ def file2item(key, fname, base_dir, config, image=None):
     description = "Video"
     filetype = "mp4"
 
-  elif ext in (".mpeg", ".mpg", ".mpeg2", ".iso"):
+  elif ext in (".mpeg", ".mpg", ".mpeg2", ".iso", ".wmv", ".asf", ".flv"):
     # this is a video file to transcode
 
     basename = os.path.split(fname)[1]
@@ -249,7 +255,7 @@ def item_sorter(lhs, rhs):
       return -1
     elif int(lhs.tracknum) > int(rhs.tracknum):
       return 1
-  
+
   # if the track numbers are the same or both don't
   # exist then sort by title
   if lhs.title.lower() < rhs.title.lower():
@@ -261,7 +267,7 @@ def item_sorter(lhs, rhs):
 
 def partition_by_firstletter(key, subdirs, basedir, minmax, config):
   "based on config, change subdirs into alphabet clumps if there are too many"
-  
+
   max_dirs = 10
   if config.has_option("config", "max_folders_before_split"):
     max_dirs = int(config.get("config", "max_folders_before_split"))
@@ -272,7 +278,7 @@ def partition_by_firstletter(key, subdirs, basedir, minmax, config):
 
   # figure out if we're doing a letter or number partition
   minl, maxl = minmax
-  
+
   if is_letter(minl):
     min_of_class = 'a'
   elif is_number(minl):
@@ -350,7 +356,7 @@ def getdoc(key, path, base_dir, dirrange, config, recurse=False):
     minl = minl.lower()
     maxl = maxl.lower()
 
-  media_re = re.compile("\.mp3|\.wma|\.m4v|\.mp4|\.mov|\.mpeg|\.mpg|\.mpeg2|\.iso")
+  media_re = re.compile("\.mp3|\.wma|\.m4v|\.mp4|\.mov|\.mpeg|\.mpg|\.mpeg2|\.iso|\.wmv|\.asf|\.flv")
 
   for base, dirs, files in os.walk(path):
     if not recurse:
@@ -379,7 +385,7 @@ def getdoc(key, path, base_dir, dirrange, config, recurse=False):
       if not media_re.match(os.path.splitext(file)[1].lower()):
         logging.debug("rejecting %s" % file)
         continue
-      
+
       path = os.path.join(base, file)
 
       if is_video(path):
@@ -434,11 +440,17 @@ def doc2m3u(doc):
 
 def range_handler(fname):
   "return all or part of the bytes of a file depending on whether we were called with the HTTP_RANGE header set"
+
   logging.debug("open file: "+fname)
   f = open(fname, "rb")
+  if not isinstance(f, file):
+	logging.debug("range_handler: Invalid file handle")
+  else:
+	logging.debug("range_handler: Valid file handle")
 
   bytes = None
   CHUNK_SIZE = 10 * 1024;
+
 
   # is this a range request?
   # looks like: 'HTTP_RANGE': 'bytes=41017-'
@@ -482,7 +494,7 @@ def range_handler(fname):
         bytes = f.read(chunk_size)
 
       f.close()
-    
+
     # try a tail regex
     regex = re.compile('bytes=-(\d+)$')
     grp = regex.match(web.ctx.environ['HTTP_RANGE'])
@@ -498,35 +510,81 @@ def range_handler(fname):
   else:
     # write the whole thing
     # we'll stream it
+    logging.debug("Stream whole file")
     bytes = f.read(CHUNK_SIZE)
     while not bytes == "":
       yield bytes
       bytes = f.read(CHUNK_SIZE)
-    
+
     f.close()
 
 def range_handler_tc(fname):
   "transcode and return all or part of the bytes of a file depending on whether we were called with the HTTP_RANGE header set"
-  logging.debug("trancode file: "+fname)
-  #f = open(fname, "rb")
-  #tc = popen('/usr/local/bin/roku_trans.sh "'+fname+'"',8096,None,None,PIPE)
-  #tc = popen('ffmpeg -i '+fname+' -vcodec copy -acodec copy  -f dvd ',8096,None,None,PIPE)
-  #tc = popen('mencoder '+fname+' -of mp4 -ovc lavc -lavcopts vcodec=mp4 -oac lavc -lavcopts acodec=mp2 -really-quiet ',8096,None,None,PIPE)
-  tc = popen('/usr/bin/ffmpeg -i ' + fname + ' -f mp4 -vcodec mpeg4 -maxrate 2000 -b 1500 -qmin 3 -qmax 5 -bufsize 4096 -g 300 -acodec aac -ar 44100 -ab 128 -s 320*240 ',809600,None,None,PIPE)
-  f = tc.stdout
+  global tc_proc, tc_fname
+  config = parse_config(config_file)
+  file_out = tc_file(config)
+
+  allow_range=True
+  allow_head=True
+  allow_span=True
+  allow_tail=True
+
+  logging.debug("trancode file: " + fname)
+
+  if fname != tc_fname or tc_proc == None:
+	if tc_proc != None and tc_proc.poll() == None:
+		logging.debug('End Transcode: '+ tc_fname)
+		tc_proc.terminate()
+		subprocess.Pclose(tc_proc)
+		if file_out != "PIPE":
+			tc_proc.wait()
+	tc_fname = fname
+	logging.debug('Start new transcode of: ' + tc_fname)
+
+  	tc_cmd = tc_path(config) + ' "' + tc_fname + '" ' + tc_args(config)
+	logging.debug('Run: ' + tc_cmd)
+
+ 	if file_out == "PIPE":
+		#transcoding via STDOUT
+		tc_proc = subprocess.Popen(tc_cmd,bufsize=-1,shell=True,stdout=subprocess.PIPE)
+	else:
+  		#transcoding via fixed file
+  		tc_proc = subprocess.Popen(tc_cmd,shell=True)
+  else:
+  	logging.debug("Send more of: " + tc_fname)
+
+  if file_out == "PIPE":
+	f = tc_proc.stdout
+	logging.debug("Use PIPE for open")
+  else:
+	f = open(file_out, "rb")
+	logging.debug("Opened: " + file_out)
+
+  if not isinstance(f, file):
+	logging.debug("range_handler_for_file: Invalid file handle")
+  else:
+	logging.debug("range_handler_for_file: Valid file handle")
+
+  #if running, no tail calls
+  #if tc_proc.poll() == None:
+  #	allow_tail=False
+
 
   bytes = None
   CHUNK_SIZE = 10 * 1024;
 
+
   # is this a range request?
   # looks like: 'HTTP_RANGE': 'bytes=41017-'
-  if 'HTTP_RANGE' in web.ctx.environ:
+  if 'HTTP_RANGE' in web.ctx.environ and allow_range:
     logging.debug("server issued range query: %s" % web.ctx.environ['HTTP_RANGE'])
 
     # try a start only regex
     regex = re.compile('bytes=(\d+)-$')
     grp = regex.match(web.ctx.environ['HTTP_RANGE'])
-    if grp:
+    if grp and allow_head:
+      logging.debug("Stream Head")
+
       start = int(grp.group(1))
       logging.debug("player issued range request starting at %d" % start)
 
@@ -534,16 +592,24 @@ def range_handler_tc(fname):
 
       # we'll stream it
       bytes = f.read(CHUNK_SIZE)
-      while not bytes == "":
-        yield bytes
-        bytes = f.read(CHUNK_SIZE)
+      while True:
+        while not bytes == "":
+          yield bytes
+          bytes = f.read(CHUNK_SIZE)
+        if tc_proc.poll() != None:
+			break
+        else:
+			time.sleep(5)
 
       f.close()
+      done = True
 
     # try a span regex
     regex = re.compile('bytes=(\d+)-(\d+)$')
     grp = regex.match(web.ctx.environ['HTTP_RANGE'])
-    if grp:
+    if grp and allow_span:
+      logging.debug("Stream Span")
+
       start,end = int(grp.group(1)), int(grp.group(2))
       logging("player issued range request starting at %d and ending at %d" % (start, end))
 
@@ -552,19 +618,28 @@ def range_handler_tc(fname):
       chunk_size = min(bytes_remaining, chunk_size)
       bytes = f.read(chunk_size)
 
-      while not bytes == "":
-        yield bytes
+      while True:
+        while not bytes == "":
+          yield bytes
 
-        bytes_remaining -= chunk_size
-        chunk_size = min(bytes_remaining, chunk_size)
-        bytes = f.read(chunk_size)
+          bytes_remaining -= chunk_size
+          chunk_size = min(bytes_remaining, chunk_size)
+          bytes = f.read(chunk_size)
+        if tc_proc.poll() != None:
+			break
+        else:
+			time.sleep(5)
+
 
       f.close()
-    
+      done = True
+
     # try a tail regex
     regex = re.compile('bytes=-(\d+)$')
     grp = regex.match(web.ctx.environ['HTTP_RANGE'])
-    if grp:
+    if grp and allow_tail:
+      logging.debug("Stream Tail")
+
       end = int(grp.group(1))
       logging.debug("player issued tail request beginning at %d from end" % end)
 
@@ -573,15 +648,28 @@ def range_handler_tc(fname):
       yield bytes
       f.close()
 
+
   else:
+    done = False
+
+  if (not done):
     # write the whole thing
     # we'll stream it
+    logging.debug("Stream All")
     bytes = f.read(CHUNK_SIZE)
-    while not bytes == "":
-      yield bytes
-      bytes = f.read(CHUNK_SIZE)
-    
+    while True:
+		while not bytes == "":
+			yield bytes
+			bytes = f.read(CHUNK_SIZE)
+		if tc_proc.poll() != None:
+			break
+		else:
+			time.sleep(5)
+
+
     f.close()
+
+
 
 class MediaHandler:
   "retrieve a song"
@@ -613,12 +701,16 @@ class MediaHandler:
     if not mimetype:
       return None
 
-    web.header("Content-Type", mimetype)
-    web.header("Content-Length", "%d" % size)
-    if song.key == "tc": 
-    	return range_handler_tc(name)
+    if song.key == "tc" and mimetype == "video/mp4":
+		#size = 0
+		web.header("Content-Type", mimetype)
+		#web.header("Content-Length", "%d" % size)
+		return range_handler_tc(name)
     else:
-	return range_handler(name)
+		web.header("Content-Type", mimetype)
+		web.header("Content-Length", "%d" % size)
+		return range_handler(name)
+
 
 class RssHandler:
   def GET(self):
@@ -629,7 +721,7 @@ class RssHandler:
 
     web.header("Content-Type", "application/rss+xml")
     feed = web.input(dir = None, range=None, key=None)
-    
+
     if not feed.key in ("music", "video"):
       return main_menu_feed(config).to_xml()
 
