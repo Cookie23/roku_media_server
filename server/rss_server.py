@@ -13,6 +13,7 @@ tc_proc = None
 tc_fname = None
 tc_f = None
 
+
 # main webapp
 import os
 import re
@@ -24,12 +25,14 @@ import ConfigParser
 import math
 import logging
 from common import *
+from upnp import *
 import subprocess
 import time
 
 logging.basicConfig(filename=LOG_FILE, level=logging.DEBUG)
 #formatter = logging.Formatter("%(levelname)@s[%(asctime)s]: %(message)s")
 #logging.getLogger().setFormatter(formatter)
+
 
 class PublishMixin:
   def publish_extensions(self, handler):
@@ -64,6 +67,7 @@ class RSSDoc(PublishMixin, RSS2):
 
 def main_menu_feed(config):
   "create the root feed for the main menu"
+  global unpn_server_list
 
   items = []
   item = dir2item("music", music_dir(config), music_dir(config), config, image=None, name="My Music")
@@ -75,6 +79,22 @@ def main_menu_feed(config):
     item = dir2item("video", dir, dir, config, image=None, name="My Video")
     item.image = "%s/media?%s" % (server_base(config), urllib.urlencode({'name': "images/videos_square.jpg", 'key': "client"}))
     items.append(item)
+
+  #UPNP is enabled
+  if use_upnp(config):
+      #something was found
+      if build_upnp_server_list():
+          #build list
+          for server in upnp_server_list:
+            if server.name:
+                logging.debug("Adding UPNP device: "+server.name)
+                item = dir2item("video", server.name, server.name, config, image=None, name=server.name)
+                item.image = "%s/media?%s" % (server_base(config), urllib.urlencode({'name': "images/videos_square.jpg", 'key': "client"}))
+                items.append(item)
+      else:
+          logging.debug("No UPNP devices detected")
+  else:
+      logging.debug("UPNP Disbaled in config. Set use_upnp = True to enable")
 
   doc = RSSDoc(
       title="A Personal Music Feed",

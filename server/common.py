@@ -220,7 +220,11 @@ def tc_file(config):
     return file
   return None
 
-
+def use_upnp(config):
+  "this is an optional variable so we're more careful about retrieving it"
+  if config.has_option("config", "use_upnp"):
+    return config.get("config", "use_upnp") and True
+  return False
 
 def client_dir(config):
   "path to the client code"
