@@ -15,7 +15,7 @@
 
 
 
-upnp_server_list = []
+upnp_server_list = {}
 
 
 
@@ -743,17 +743,29 @@ def build_upnp_server_list ():
 
     #search for 5 seconds
 
-    end = datetime.datetime.now() + datetime.timedelta(seconds=10)
+    end = datetime.datetime.now() + datetime.timedelta(seconds=12)
     while datetime.datetime.now() < end:
         upnp_serv.parseSSDPInfo(upnp_serv.listen(1024,server),False,False)
 
     if upnp_serv.ENUM_HOSTS == 0:
-        upnp_server_list = []
+        upnp_server_list = {}
         return False
 
     for index,hostInfo in upnp_serv.ENUM_HOSTS.iteritems():
-        item = upnp_server(index)
-        upnp_server_list.append(item)
+        if hostInfo['dataComplete'] != True:
+            #Get extended device and service information
+            if hostInfo != False:
+                logging.debug("Requesting device and service info for %s (this could take a few seconds)..." % hostInfo['name'])
+                if hostInfo['dataComplete'] == False:
+                    (xmlHeaders,xmlData) = upnp_serv.getXML(hostInfo['xmlFile'])
+                    if xmlData == False:
+                        logging.debug('Failed to request host XML file:',hostInfo['xmlFile'])
+                    elif upnp_serv.getHostInfo(xmlData,xmlHeaders,index) == False:
+                        logging.debug("Failed to get device/service info for %s..." % hostInfo['name'])
+                    else:
+                        logging.debug( 'Host data enumeration complete!')
+                        item = upnp_server(index)
+                        upnp_server_list[item.name]=item
     return upnp_server_list
 
 upnp_serv = upnp(False,False,None)
@@ -769,16 +781,17 @@ class upnp_server:
         self.index=my_index
         self.hostinfo=upnp_serv.ENUM_HOSTS[my_index]
         self.name="UPNP %d" % my_index
+        if self.hostinfo['name']:
+            self.name=self.hostinfo['name']
 
         for deviceName,deviceData in upnp_serv.ENUM_HOSTS[self.index]['deviceList'].iteritems():
-
             for k,v in deviceData.iteritems():
                 try:
                     v.has_key(False)
                 except:
                     logging.debug('%s=%s' % (k,v))
                     if k == "friendlyName":
-                        name=v
+                        self.name=v
 
         #name=hostinfo['deviceList']['deviceData'].['friendlyName']
 

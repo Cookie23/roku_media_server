@@ -85,10 +85,10 @@ def main_menu_feed(config):
       #something was found
       if build_upnp_server_list():
           #build list
-          for server in upnp_server_list:
+          for name,server in upnp_server_list.iteritems():
             if server.name:
                 logging.debug("Adding UPNP device: "+server.name)
-                item = dir2item("video", server.name, server.name, config, image=None, name=server.name)
+                item = dir2item("upnp", server.index, server.index, config, image=None, name=server.name)
                 item.image = "%s/media?%s" % (server_base(config), urllib.urlencode({'name': "images/videos_square.jpg", 'key': "client"}))
                 items.append(item)
       else:
@@ -195,20 +195,34 @@ def file2item(key, fname, base_dir, config, image=None):
       tracknum = tracknum)
 
 def dir2item(key, dname, base_dir, config, image, name=None):
-  path = relpath26(dname, base_dir)
+  if key!="upnp":
+      path = relpath26(dname, base_dir)
 
-  link = "%s/feed?%s" % (server_base(config), urllib.urlencode({'dir':to_utf8(path), 'key': key}))
+      link = "%s/feed?%s" % (server_base(config), urllib.urlencode({'dir':to_utf8(path), 'key': key}))
 
-  if not name:
-    name = os.path.split(dname)[1]
+      if not name:
+        name = os.path.split(dname)[1]
 
-  if image:
-    image = relpath26(image, base_dir)
-    image = "%s/media?%s" % (server_base(config), urllib.urlencode({'name':to_utf8(image), 'key': key}))
+      if image:
+        image = relpath26(image, base_dir)
+        image = "%s/media?%s" % (server_base(config), urllib.urlencode({'name':to_utf8(image), 'key': key}))
 
-  description = "Folder"
-  #if image:
-  #  description += "<img src=\"%s\" />" % image
+      description = "Folder"
+      #if image:
+      #  description += "<img src=\"%s\" />" % image
+  else:
+      path = base_dir + dname
+
+      link = "%s/feed?%s" % (server_base(config), urllib.urlencode({'dir':to_utf8(path), 'key': key}))
+
+      if not name:
+        name = os.path.split(dname)[1]
+
+      if image:
+        image = relpath26(image, base_dir)
+        image = "%s/media?%s" % (server_base(config), urllib.urlencode({'name':to_utf8(image), 'key': key}))
+
+      description = "UPNP Folder"
 
   return RSSImageItem(
       title = name,
